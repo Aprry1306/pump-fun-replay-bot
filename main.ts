@@ -180,13 +180,21 @@ function onBatch(state: BotState, batch: Batch): OrderInput[] {
   // Eligibility can only begin on a slot where the mint trades (reserves and
   // velocity only move on trades; age only grows), so checking this batch's
   // mints catches every entry window.
+  //
+  // A mint with a buy already in flight (a probe's, say) is skipped: two
+  // fills on one mint would merge into a single harness position, and the
+  // second fill would overwrite the first one's kind and fill price.
+  const buyPending = new Set<string>();
+  for (const p of state.pending.values()) {
+    if (p.order.side === "buy") buyPending.add(p.order.mint);
+  }
   const checked = new Set<string>();
   for (const e of batch.events) {
     if (e.event !== "TradeEvent") continue;
     const mint = e.mint;
     if (checked.has(mint)) continue;
     checked.add(mint);
-    if (entered.has(mint) || openPos.has(mint)) continue;
+    if (entered.has(mint) || openPos.has(mint) || buyPending.has(mint)) continue;
     const curve = state.curves.get(mint);
     if (curve === undefined || curve.complete) continue;
     if (curve.real_quote_reserves < ENTRY_RQ) continue;
